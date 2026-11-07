@@ -82,3 +82,4 @@ function generateFallbackSummary(title: string, content: string): AISummaryResul
     impactLevel: title.toLowerCase().includes('rate') || title.toLowerCase().includes('crash') ? 'HIGH' : 'MEDIUM',
   };
 }
+

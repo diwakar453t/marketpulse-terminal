@@ -122,3 +122,4 @@ vercel --prod
 - **RSS Parser**: Fast-XML-Parser
 - **AI Engine**: Google Gemini API (`@google/generative-ai`)
 - **Hosting & Cron**: Vercel Serverless + Vercel Cron
+

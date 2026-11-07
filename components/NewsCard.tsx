@@ -229,3 +229,4 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     </article>
   );
 };
+

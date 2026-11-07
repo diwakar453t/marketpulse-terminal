@@ -98,3 +98,4 @@ export const SectionTabs: React.FC<SectionTabsProps> = ({
     </div>
   );
 };
+

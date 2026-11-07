@@ -149,3 +149,4 @@ export function cleanText(htmlOrText: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+

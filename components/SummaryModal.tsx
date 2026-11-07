@@ -198,3 +198,4 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({ item, onClose }) => 
     </div>
   );
 };
+

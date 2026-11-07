@@ -117,3 +117,4 @@ export const BreakingTicker: React.FC<BreakingTickerProps> = ({
     </div>
   );
 };
+

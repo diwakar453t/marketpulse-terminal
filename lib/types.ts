@@ -34,3 +34,4 @@ export interface NewsResponse {
   items: NewsItem[];
   highImpactAlerts: NewsItem[];
 }
+
