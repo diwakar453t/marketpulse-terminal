@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Key, Check, Trash2, ExternalLink, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Key, Check, Trash2, ExternalLink } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -31,7 +31,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
-    }, 1000);
+    }, 800);
   };
 
   const handleClear = () => {
@@ -40,87 +40,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-md bg-[#0D121F] border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-sm bg-[#111115] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between bg-[#111827]/70">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-purple-900/40 text-purple-400 border border-purple-700/40">
-              <Key className="w-4 h-4" />
-            </div>
-            <h3 className="font-bold text-gray-200 text-sm">
-              Gemini AI Settings
-            </h3>
+        <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-mono text-zinc-300">
+            <Key className="w-3.5 h-3.5" />
+            <span>Gemini API Key</span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
-          >
+          <button onClick={onClose} className="p-1 text-zinc-500 hover:text-zinc-200">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 space-y-4 text-xs">
-          <p className="text-gray-300 leading-relaxed">
-            MarketPulse uses Google's Gemini models to distill long economic articles into direct 2-point market impacts, removing clickbait and noise.
+        <div className="p-5 space-y-4 text-xs">
+          <p className="text-zinc-400 leading-relaxed">
+            Your key is stored locally in your browser to generate zero-fluff market impact summaries.
           </p>
 
           <div>
-            <label className="block text-gray-400 font-semibold mb-1.5">
-              Enter Gemini API Key
-            </label>
             <input
               type="password"
-              placeholder="AIzaSy..."
+              placeholder="Paste AIzaSy... key"
               value={inputKey}
               onChange={(e) => setInputKey(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-gray-900 border border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500 font-mono text-xs"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 font-mono text-xs"
             />
-            <p className="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3 text-gray-400" />
-              Stored safely in your browser localStorage. Never saved on third-party servers.
-            </p>
           </div>
 
-          <div className="pt-2 flex items-center justify-between">
+          <div className="flex items-center justify-between text-[11px]">
             <a
               href="https://aistudio.google.com/app/apikey"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-purple-400 hover:text-purple-300 flex items-center gap-1 underline"
+              className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 underline"
             >
-              Get free Gemini API Key
+              Get free Gemini Key
               <ExternalLink className="w-3 h-3" />
             </a>
 
             {inputKey && (
               <button
                 onClick={handleClear}
-                className="text-red-400 hover:text-red-300 flex items-center gap-1"
+                className="text-rose-400 hover:text-rose-300 flex items-center gap-1"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Remove Key
+                <Trash2 className="w-3 h-3" />
+                Clear
               </button>
             )}
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-800 bg-[#111827]/70 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-zinc-800 flex items-center justify-end gap-2 text-xs">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-gray-400 hover:text-white text-xs font-semibold hover:bg-gray-800"
+            className="px-3 py-1.5 text-zinc-400 hover:text-zinc-200 font-medium"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-950/40 active:scale-95 transition-all"
+            className="px-3 py-1.5 rounded-md bg-zinc-100 text-zinc-950 hover:bg-white font-medium transition-colors flex items-center gap-1"
           >
             {savedSuccess ? (
               <>
-                <Check className="w-3.5 h-3.5" /> Saved!
+                <Check className="w-3.5 h-3.5" /> Saved
               </>
             ) : (
               'Save Key'
@@ -131,4 +120,3 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </div>
   );
 };
-

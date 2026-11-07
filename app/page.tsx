@@ -5,18 +5,13 @@ import {
   Search,
   Filter,
   AlertCircle,
-  TrendingUp,
-  Layers,
-  Sparkles,
-  RefreshCw,
   Clock,
-  Trash2,
-  Calendar,
+  Sparkles,
 } from 'lucide-react';
 import { NewsCategory, NewsItem, MarketImpact, MarketSentiment } from '@/lib/types';
 import { Navbar } from '@/components/Navbar';
 import { BreakingTicker } from '@/components/BreakingTicker';
-import { SectionTabs } from '@/components/SectionTabs';
+import { SectionTabs, ExtendedCategory } from '@/components/SectionTabs';
 import { NewsCard } from '@/components/NewsCard';
 import { SummaryModal } from '@/components/SummaryModal';
 import { SettingsModal } from '@/components/SettingsModal';
@@ -30,12 +25,15 @@ export default function Home() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & Tabs
-  const [activeTab, setActiveTab] = useState<NewsCategory>('all');
+  // Tabs & Filters
+  const [activeTab, setActiveTab] = useState<ExtendedCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImpact, setSelectedImpact] = useState<MarketImpact | 'ALL'>('ALL');
   const [selectedSentiment, setSelectedSentiment] = useState<MarketSentiment | 'ALL'>('ALL');
   const [selectedSource, setSelectedSource] = useState<string>('ALL');
+
+  // Bookmarks (saved articles)
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   // Sync Timer
   const [nextUpdateSeconds, setNextUpdateSeconds] = useState(SYNC_INTERVAL_SECONDS);
@@ -44,23 +42,48 @@ export default function Home() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
-  // Modals & Summarizer state
+  // Modals & Summarizer
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [summarizingId, setSummarizingId] = useState<string | null>(null);
 
-  // Load custom Gemini API key & notification preferences on mount
+  // Load preferences from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedKey = localStorage.getItem('market_pulse_gemini_key') || '';
       setGeminiApiKey(storedKey);
+
+      try {
+        const storedBookmarks = localStorage.getItem('market_pulse_bookmarks');
+        if (storedBookmarks) {
+          setBookmarkedIds(new Set(JSON.parse(storedBookmarks)));
+        }
+      } catch {
+        // ignore parse error
+      }
 
       if ('Notification' in window && Notification.permission === 'granted') {
         setNotificationsEnabled(true);
       }
     }
   }, []);
+
+  // Toggle bookmark
+  const handleToggleBookmark = (item: NewsItem) => {
+    setBookmarkedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('market_pulse_bookmarks', JSON.stringify(Array.from(next)));
+      }
+      return next;
+    });
+  };
 
   // Fetch news data
   const fetchNews = useCallback(async (isManualRefresh = false) => {
@@ -77,7 +100,7 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch financial intelligence');
+        throw new Error(data.error || 'Failed to fetch financial news');
       }
 
       setItems(data.items || []);
@@ -87,19 +110,18 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Unable to connect to market news feed.');
+      setError(err.message || 'Unable to connect to market feed');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     fetchNews();
   }, [fetchNews]);
 
-  // 5-hour countdown & periodic auto-sync
+  // 5-hour countdown & auto-sync
   useEffect(() => {
     const timer = setInterval(() => {
       setNextUpdateSeconds((prev) => {
@@ -114,31 +136,30 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [fetchNews]);
 
-  // Request browser notifications
+  // Push notifications
   const handleRequestNotifications = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      alert('This browser does not support desktop notifications.');
+      alert('Notifications are not supported in this browser.');
       return;
     }
 
     if (Notification.permission === 'granted') {
       setNotificationsEnabled(true);
-      alert('High-impact breaking market notifications are already enabled!');
+      alert('Alert notifications are active.');
       return;
     }
 
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       setNotificationsEnabled(true);
-      new Notification('MarketPulse Alerts Active', {
-        body: 'You will receive instant alerts for major financial events.',
+      new Notification('MarketPulse', {
+        body: 'Alerts enabled for high-impact financial events.',
       });
     } else {
       setNotificationsEnabled(false);
     }
   };
 
-  // Save Gemini Key
   const handleSaveApiKey = (key: string) => {
     setGeminiApiKey(key);
     if (typeof window !== 'undefined') {
@@ -150,7 +171,7 @@ export default function Home() {
     }
   };
 
-  // Summarize with Gemini on card click
+  // Summarize with Gemini
   const handleQuickSummarize = async (item: NewsItem) => {
     try {
       setSummarizingId(item.id);
@@ -167,7 +188,6 @@ export default function Home() {
 
       const data = await res.json();
       if (data.success && data.summary) {
-        // Update local item
         const updatedItem = {
           ...item,
           aiSummary: data.summary,
@@ -189,7 +209,7 @@ export default function Home() {
     }
   };
 
-  // Compute category counts
+  // Category counts
   const sectionCounts = useMemo(() => {
     const counts = {
       all: items.length,
@@ -197,55 +217,57 @@ export default function Home() {
       economic: 0,
       market: 0,
       business: 0,
+      saved: 0,
     };
 
     items.forEach((item) => {
       if (item.category in counts) {
         counts[item.category as keyof typeof counts]++;
       }
+      if (bookmarkedIds.has(item.id)) {
+        counts.saved++;
+      }
     });
 
     return counts;
-  }, [items]);
+  }, [items, bookmarkedIds]);
 
-  // Extract distinct sources
+  // Distinct sources
   const availableSources = useMemo(() => {
     const sources = new Set<string>();
     items.forEach((item) => sources.add(item.source));
     return Array.from(sources).sort();
   }, [items]);
 
-  // Filtered Items
+  // Filtered items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      // 1. Category Tab
-      if (activeTab !== 'all' && item.category !== activeTab) {
+      // Saved tab
+      if (activeTab === 'saved') {
+        if (!bookmarkedIds.has(item.id)) return false;
+      } else if (activeTab !== 'all' && item.category !== activeTab) {
         return false;
       }
 
-      // 2. Impact Filter
       if (selectedImpact !== 'ALL' && item.impactLevel !== selectedImpact) {
         return false;
       }
 
-      // 3. Sentiment Filter
       if (selectedSentiment !== 'ALL' && item.sentiment !== selectedSentiment) {
         return false;
       }
 
-      // 4. Source Filter
       if (selectedSource !== 'ALL' && item.source !== selectedSource) {
         return false;
       }
 
-      // 5. Search Query
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const matchesTitle = item.title.toLowerCase().includes(query);
-        const matchesSnippet = item.snippet.toLowerCase().includes(query);
-        const matchesSource = item.source.toLowerCase().includes(query);
+        const q = searchQuery.toLowerCase().trim();
+        const matchesTitle = item.title.toLowerCase().includes(q);
+        const matchesSnippet = item.snippet.toLowerCase().includes(q);
+        const matchesSource = item.source.toLowerCase().includes(q);
         const matchesSector = item.affectedSectors.some((s) =>
-          s.toLowerCase().includes(query)
+          s.toLowerCase().includes(q)
         );
         if (!matchesTitle && !matchesSnippet && !matchesSource && !matchesSector) {
           return false;
@@ -254,10 +276,10 @@ export default function Home() {
 
       return true;
     });
-  }, [items, activeTab, selectedImpact, selectedSentiment, selectedSource, searchQuery]);
+  }, [items, activeTab, selectedImpact, selectedSentiment, selectedSource, searchQuery, bookmarkedIds]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090D16]">
+    <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100 selection:bg-zinc-800">
       {/* Top Navbar */}
       <Navbar
         onRefresh={() => fetchNews(true)}
@@ -271,207 +293,124 @@ export default function Home() {
         hasCustomApiKey={!!geminiApiKey}
       />
 
-      {/* Breaking Ticker with alerts */}
+      {/* Subtle Breaking Alerts */}
       <BreakingTicker
         alerts={highAlerts}
         soundEnabled={soundEnabled}
         onSelectArticle={(item) => setSelectedArticle(item)}
       />
 
-      {/* 4 Section Navigation Tabs */}
+      {/* Minimal Section Tabs */}
       <SectionTabs
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         counts={sectionCounts}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Retention & Update Notice Banner */}
-        <div className="mb-6 rounded-2xl bg-gradient-to-r from-gray-900 via-gray-900/90 to-[#101726] border border-gray-800 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-800 text-emerald-400">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-gray-200">
-                48-Hour Live Market Intelligence Pipeline
-              </h2>
-              <p className="text-xs text-gray-400">
-                Aggregated from Economic Times, Moneycontrol, Bloomberg, CNBC, Yahoo Finance, BlackRock, Zerodha, Forex Factory & more. News older than 2 days is automatically pruned.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/40 border border-gray-800 text-[11px] text-gray-400 font-mono">
-              <Clock className="w-3.5 h-3.5 text-blue-400" />
-              <span>Auto-refreshes every 5 hours</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Search & Quick Filters Bar */}
-        <div className="mb-6 space-y-3">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search stocks, indices, RBI, Fed, earnings, tariffs, deals (e.g. NIFTY, Crude, Reliance, Tech)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/90 border border-gray-800 focus:border-emerald-500 text-gray-200 placeholder-gray-500 text-xs sm:text-sm focus:outline-none transition-all shadow-inner"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-xs"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            {/* Source Filter Dropdown */}
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedSource}
-                onChange={(e) => setSelectedSource(e.target.value)}
-                className="px-3 py-2.5 rounded-xl bg-gray-900 border border-gray-800 text-gray-300 text-xs focus:outline-none focus:border-emerald-500"
-              >
-                <option value="ALL">All Media Sources ({availableSources.length})</option>
-                {availableSources.map((src) => (
-                  <option key={src} value={src}>
-                    {src}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Quick Filter Chips (Impact & Sentiment) */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-              <Filter className="w-3 h-3" /> Filter:
-            </span>
-
-            {/* Impact Filter Chips */}
-            <button
-              onClick={() => setSelectedImpact('ALL')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                selectedImpact === 'ALL'
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-gray-900 text-gray-400 hover:bg-gray-800'
-              }`}
-            >
-              All Impacts
-            </button>
-            <button
-              onClick={() => setSelectedImpact('HIGH')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                selectedImpact === 'HIGH'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900/40'
-              }`}
-            >
-              🚨 High Impact Only
-            </button>
-            <button
-              onClick={() => setSelectedImpact('MEDIUM')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                selectedImpact === 'MEDIUM'
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-amber-950/40 text-amber-300 border border-amber-900/60 hover:bg-amber-900/40'
-              }`}
-            >
-              ⚡ Moderate Impact
-            </button>
-
-            <span className="text-gray-700">|</span>
-
-            {/* Sentiment Filter Chips */}
-            <button
-              onClick={() => setSelectedSentiment('BULLISH')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                selectedSentiment === 'BULLISH'
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/60 hover:bg-emerald-900/40'
-              }`}
-            >
-              🟢 Bullish
-            </button>
-            <button
-              onClick={() => setSelectedSentiment('BEARISH')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                selectedSentiment === 'BEARISH'
-                  ? 'bg-rose-600 text-white'
-                  : 'bg-rose-950/40 text-rose-400 border border-rose-900/60 hover:bg-rose-900/40'
-              }`}
-            >
-              🔴 Bearish
-            </button>
-
-            {/* Reset All Filters */}
-            {(selectedImpact !== 'ALL' ||
-              selectedSentiment !== 'ALL' ||
-              selectedSource !== 'ALL' ||
-              searchQuery) && (
+      {/* Main Container */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
+        {/* Minimal Search & Filter Bar */}
+        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Filter headlines, companies, tickers..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 rounded-lg bg-zinc-900/70 border border-zinc-800 text-zinc-200 placeholder-zinc-500 text-xs focus:outline-none focus:border-zinc-700 transition-colors"
+            />
+            {searchQuery && (
               <button
-                onClick={() => {
-                  setSelectedImpact('ALL');
-                  setSelectedSentiment('ALL');
-                  setSelectedSource('ALL');
-                  setSearchQuery('');
-                }}
-                className="ml-auto text-xs text-gray-400 hover:text-white underline"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
               >
-                Reset filters
+                ✕
               </button>
             )}
           </div>
+
+          {/* Minimal Filter Controls */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
+            <button
+              onClick={() => setSelectedImpact(selectedImpact === 'HIGH' ? 'ALL' : 'HIGH')}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap border ${
+                selectedImpact === 'HIGH'
+                  ? 'bg-zinc-100 text-zinc-950 border-zinc-100 font-semibold'
+                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              High Impact
+            </button>
+
+            <button
+              onClick={() => setSelectedSentiment(selectedSentiment === 'BULLISH' ? 'ALL' : 'BULLISH')}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap border ${
+                selectedSentiment === 'BULLISH'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold'
+                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Bullish
+            </button>
+
+            <button
+              onClick={() => setSelectedSentiment(selectedSentiment === 'BEARISH' ? 'ALL' : 'BEARISH')}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap border ${
+                selectedSentiment === 'BEARISH'
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 font-semibold'
+                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Bearish
+            </button>
+
+            {/* Source select */}
+            <select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="px-2.5 py-1.5 rounded-md bg-zinc-900/60 border border-zinc-800 text-zinc-400 text-xs focus:outline-none focus:border-zinc-700"
+            >
+              <option value="ALL">All Sources</option>
+              {availableSources.map((src) => (
+                <option key={src} value={src}>
+                  {src}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Error Notification */}
+        {/* Error */}
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-            <button
-              onClick={() => fetchNews(true)}
-              className="underline hover:text-white ml-2 flex-shrink-0"
-            >
-              Try Again
+          <div className="mb-6 p-3 rounded-lg bg-zinc-900 border border-rose-900/40 text-rose-300 text-xs flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => fetchNews(true)} className="underline hover:text-white">
+              Retry
             </button>
           </div>
         )}
 
-        {/* Loading Skeletons */}
+        {/* Skeletons */}
         {isLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div
                 key={n}
-                className="h-64 rounded-2xl bg-gray-900/60 border border-gray-800 animate-pulse p-5 flex flex-col justify-between"
+                className="h-44 rounded-xl bg-zinc-900/40 border border-zinc-800/60 animate-pulse p-4 space-y-3"
               >
-                <div className="space-y-3">
-                  <div className="h-4 bg-gray-800 rounded w-1/3" />
-                  <div className="h-6 bg-gray-800 rounded w-5/6" />
-                  <div className="h-4 bg-gray-800 rounded w-full" />
-                  <div className="h-4 bg-gray-800 rounded w-4/6" />
-                </div>
-                <div className="h-8 bg-gray-800 rounded w-full" />
+                <div className="h-3 bg-zinc-800/80 rounded w-1/3" />
+                <div className="h-5 bg-zinc-800/80 rounded w-5/6" />
+                <div className="h-3 bg-zinc-800/60 rounded w-full" />
               </div>
             ))}
           </div>
         )}
 
-        {/* News Cards Grid */}
+        {/* Minimal News Grid */}
         {!isLoading && filteredItems.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredItems.map((item) => (
               <NewsCard
                 key={item.id}
@@ -479,20 +418,18 @@ export default function Home() {
                 onOpenSummary={(it) => setSelectedArticle(it)}
                 onQuickSummarize={handleQuickSummarize}
                 isSummarizing={summarizingId === item.id}
+                isBookmarked={bookmarkedIds.has(item.id)}
+                onToggleBookmark={handleToggleBookmark}
               />
             ))}
           </div>
         )}
 
-        {/* Empty State */}
+        {/* Empty state */}
         {!isLoading && filteredItems.length === 0 && (
-          <div className="text-center py-16 px-4 rounded-2xl bg-gray-900/30 border border-gray-800/60">
-            <TrendingUp className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-gray-300">
-              No matching financial stories found
-            </h3>
-            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-              Try adjusting your search keywords, impact filters, or switch to another section tab.
+          <div className="text-center py-20 px-4">
+            <p className="text-xs text-zinc-500">
+              No matching news in this category.
             </p>
             <button
               onClick={() => {
@@ -502,31 +439,19 @@ export default function Home() {
                 setSelectedSource('ALL');
                 setSearchQuery('');
               }}
-              className="mt-4 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 transition-all"
+              className="mt-3 text-xs text-zinc-400 hover:text-zinc-200 underline"
             >
-              Clear All Filters
+              Reset filters
             </button>
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="mt-12 border-t border-gray-800 bg-[#070B12] py-8 text-xs text-gray-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="font-semibold text-gray-400">MarketPulse Terminal</span>
-            <span>• Verified Share Market Aggregator</span>
-          </div>
-
-          <div className="text-center md:text-right space-y-1">
-            <p>
-              Auto-purges news &gt; 48 hours old • Updates every 5-6 hours • High-Impact Alerts
-            </p>
-            <p className="text-[11px] text-gray-600">
-              Sources: Economic Times, Moneycontrol, Hindustan Times, BBC, Zee News, Bloomberg, CNBC, Yahoo Finance, BlackRock, Zerodha, Forex Factory & Google News.
-            </p>
-          </div>
+      {/* Minimal Footer */}
+      <footer className="mt-16 border-t border-zinc-800/60 py-6 text-[11px] text-zinc-500">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>MarketPulse • 48h rolling financial intelligence</span>
+          <span>Economic Times, Moneycontrol, Bloomberg, CNBC, Yahoo, Zerodha & more</span>
         </div>
       </footer>
 
@@ -545,4 +470,3 @@ export default function Home() {
     </div>
   );
 }
-
